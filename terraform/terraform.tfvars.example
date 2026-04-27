@@ -1,0 +1,35 @@
+aws_region                 = "us-east-1"
+aws_profile                = "dev"
+project_name               = "moniq-reference-data"
+environment                = "dev"
+
+glue_catalog_id            = null
+glue_database_name         = "reference_data"
+glue_database_description  = "Reference data lake database for Iceberg tables."
+glue_database_location_uri = "s3://your-data-bucket/lake/reference_data/"
+
+create_data_bucket         = false
+data_bucket_name           = "your-data-bucket"
+data_bucket_force_destroy  = false
+
+enable_crawler_role        = true
+enable_job_role            = true
+enable_emr_serverless      = true
+
+emr_serverless_release_label                  = "emr-7.12.0"
+emr_serverless_auto_stop_idle_timeout_minutes = 15
+emr_serverless_maximum_cpu                    = "16 vCPU"
+emr_serverless_maximum_memory                 = "64 GB"
+emr_serverless_job_prefix                     = "artifacts/emr-serverless/jobs"
+emr_serverless_log_prefix                     = "logs/emr-serverless"
+
+daily_pricing_raw_input_path              = "s3://your-data-bucket/raw/massive/day_aggs_v1/"
+daily_pricing_warehouse_path              = "s3://your-data-bucket/curated/"
+daily_pricing_backfill_max_concurrency    = 1
+daily_pricing_backfill_state_machine_name = null
+
+tags = {
+  managed_by  = "terraform"
+  project     = "moniq-reference-data"
+  environment = "dev"
+}

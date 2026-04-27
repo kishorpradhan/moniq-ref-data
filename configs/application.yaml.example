@@ -1,0 +1,5 @@
+app_name: sample-job
+environment: local
+input_path: s3a://your-bucket/path/
+output_path: s3a://your-bucket/output/
+
