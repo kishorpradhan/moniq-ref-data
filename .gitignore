@@ -15,6 +15,7 @@ logs/driver/*.log
 logs/executor/*.log
 *.csv.gz
 terraform/.terraform/
+**/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfvars
 terraform/*.tfstate

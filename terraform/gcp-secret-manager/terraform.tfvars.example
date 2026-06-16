@@ -1,0 +1,10 @@
+gcp_project_id = "moniq-490803"
+gcp_region     = "us-central1"
+
+runtime_service_account_email = "cloud-run-loader@moniq-490803.iam.gserviceaccount.com"
+
+secret_ids = {
+  aws_access_key_id     = "aws-access-key-id"
+  aws_secret_access_key = "aws-secret-access-key"
+  db_password           = "moniq-upload-db-password"
+}

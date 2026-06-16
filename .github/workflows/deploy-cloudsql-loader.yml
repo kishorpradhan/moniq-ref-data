@@ -1,0 +1,128 @@
+name: Deploy Cloud SQL Loader
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/deploy-cloudsql-loader.yml
+      - Dockerfile.cloudsql-loader
+      - jobs/load_s3_to_cloudsql.py
+      - requirements-cloudsql-loader.txt
+      - common/**
+      - utils/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  CLOUD_RUN_JOB_NAME: ${{ vars.CLOUD_RUN_JOB_NAME || 's3-to-cloudsql-daily-pricing' }}
+  SCHEDULER_JOB_NAME: ${{ vars.SCHEDULER_JOB_NAME || 'daily-s3-to-cloudsql-pricing' }}
+  SCHEDULER_TIME_ZONE: ${{ vars.SCHEDULER_TIME_ZONE || 'America/New_York' }}
+  SCHEDULER_CRON: ${{ vars.SCHEDULER_CRON || '0 8 * * *' }}
+  IMAGE_NAME: s3-to-cloudsql
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        id: build
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          docker build -f Dockerfile.cloudsql-loader -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy Cloud Run Job
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.GCP_REGION }}
+          job: ${{ env.CLOUD_RUN_JOB_NAME }}
+          image: ${{ steps.build.outputs.image_uri }}
+          env_vars: |-
+            S3_BUCKET=${{ vars.S3_BUCKET }}
+            S3_PREFIX=${{ vars.S3_PREFIX }}
+            DAYS_AGO=${{ vars.DAYS_AGO || '1' }}
+            LOOKBACK_DAYS=${{ vars.LOOKBACK_DAYS || '5' }}
+            JOB_TIMEZONE=${{ vars.JOB_TIMEZONE || 'America/New_York' }}
+            CLOUD_SQL_CONNECTION_NAME=${{ vars.CLOUD_SQL_CONNECTION_NAME }}
+            DB_NAME=${{ vars.DB_NAME }}
+            DB_USER=${{ vars.DB_USER }}
+            DB_SCHEMA=${{ vars.DB_SCHEMA || 'public' }}
+            TARGET_TABLE=${{ vars.TARGET_TABLE || 'daily_pricing' }}
+            REQUIRE_DATA=${{ vars.REQUIRE_DATA || 'false' }}
+          secrets: |-
+            AWS_ACCESS_KEY_ID=${{ vars.AWS_ACCESS_KEY_ID_SECRET }}:latest
+            AWS_SECRET_ACCESS_KEY=${{ vars.AWS_SECRET_ACCESS_KEY_SECRET }}:latest
+            DB_PASSWORD=${{ vars.DB_PASSWORD_SECRET }}:latest
+          flags: >-
+            --service-account=${{ vars.CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
+            --set-cloudsql-instances=${{ vars.CLOUD_SQL_CONNECTION_NAME }}
+            --memory=${{ vars.CLOUD_RUN_MEMORY || '1Gi' }}
+            --cpu=${{ vars.CLOUD_RUN_CPU || '1' }}
+            --tasks=1
+            --max-retries=${{ vars.CLOUD_RUN_MAX_RETRIES || '1' }}
+            --task-timeout=${{ vars.CLOUD_RUN_TASK_TIMEOUT || '3600s' }}
+
+      - name: Create or update daily scheduler
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SCHEDULER_SERVICE_ACCOUNT: ${{ vars.SCHEDULER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+
+          JOB_URI="https://${GCP_REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${CLOUD_RUN_JOB_NAME}:run"
+
+          if gcloud scheduler jobs describe "${SCHEDULER_JOB_NAME}" \
+            --project "${PROJECT_ID}" \
+            --location "${GCP_REGION}" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http "${SCHEDULER_JOB_NAME}" \
+              --project "${PROJECT_ID}" \
+              --location "${GCP_REGION}" \
+              --schedule "${SCHEDULER_CRON}" \
+              --time-zone "${SCHEDULER_TIME_ZONE}" \
+              --uri "${JOB_URI}" \
+              --http-method POST \
+              --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+              --oauth-service-account-email "${SCHEDULER_SERVICE_ACCOUNT}"
+          else
+            gcloud scheduler jobs create http "${SCHEDULER_JOB_NAME}" \
+              --project "${PROJECT_ID}" \
+              --location "${GCP_REGION}" \
+              --schedule "${SCHEDULER_CRON}" \
+              --time-zone "${SCHEDULER_TIME_ZONE}" \
+              --uri "${JOB_URI}" \
+              --http-method POST \
+              --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+              --oauth-service-account-email "${SCHEDULER_SERVICE_ACCOUNT}"
+          fi
+
+      - name: Show deployed job
+        run: |
+          gcloud run jobs describe "${CLOUD_RUN_JOB_NAME}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${GCP_REGION}" \
+            --format "table(metadata.name,status.latestCreatedExecution.name)"

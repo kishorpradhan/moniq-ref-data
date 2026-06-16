@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements-cloudsql-loader.txt .
+RUN pip install --no-cache-dir -r requirements-cloudsql-loader.txt
+
+COPY common ./common
+COPY jobs ./jobs
+COPY utils ./utils
+
+CMD ["python", "-m", "jobs.load_s3_to_cloudsql"]
