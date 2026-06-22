@@ -28,9 +28,10 @@ locals {
 }
 
 resource "google_sql_database" "loader" {
-  project  = var.gcp_project_id
-  instance = var.cloud_sql_instance_name
-  name     = var.runtime_env.db_name
+  project         = var.gcp_project_id
+  instance        = var.cloud_sql_instance_name
+  name            = var.runtime_env.db_name
+  deletion_policy = "ABANDON"
 
   lifecycle {
     prevent_destroy = true

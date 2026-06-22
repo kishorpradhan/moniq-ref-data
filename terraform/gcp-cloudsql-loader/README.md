@@ -9,7 +9,7 @@ This Terraform module owns the runtime deployment for the S3 to Cloud SQL refere
 - non-secret runtime environment variables
 - Secret Manager references for AWS credentials and the Cloud SQL password
 
-The Cloud SQL database resource uses Terraform `prevent_destroy` lifecycle protection so an accidental destroy plan cannot delete the Postgres database.
+The Cloud SQL database resource uses `deletion_policy = "ABANDON"` and Terraform `prevent_destroy` lifecycle protection so an accidental destroy plan cannot delete the Postgres database.
 
 The schema-init job runs the loader image with `--ensure-schema-only`. It creates:
 
