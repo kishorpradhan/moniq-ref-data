@@ -32,7 +32,9 @@ resource "google_sql_database" "loader" {
   instance = var.cloud_sql_instance_name
   name     = var.runtime_env.db_name
 
-  deletion_policy = "ABANDON"
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_cloud_run_v2_job" "loader" {
