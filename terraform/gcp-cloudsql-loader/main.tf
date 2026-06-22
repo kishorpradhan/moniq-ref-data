@@ -18,6 +18,8 @@ locals {
 
   schema_job_trigger = sha256(jsonencode({
     image_uri                 = var.image_uri
+    command                   = ["python", "-m", "jobs.load_s3_to_cloudsql"]
+    args                      = ["--ensure-schema-only"]
     cloud_sql_connection_name = var.cloud_sql_connection_name
     db_name                   = var.runtime_env.db_name
     db_user                   = var.runtime_env.db_user
@@ -135,8 +137,9 @@ resource "google_cloud_run_v2_job" "schema" {
       timeout         = var.schema_job_task_timeout
 
       containers {
-        image = var.image_uri
-        args  = ["--ensure-schema-only"]
+        image   = var.image_uri
+        command = ["python", "-m", "jobs.load_s3_to_cloudsql"]
+        args    = ["--ensure-schema-only"]
 
         resources {
           limits = {
