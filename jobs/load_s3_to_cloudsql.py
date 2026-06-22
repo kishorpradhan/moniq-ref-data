@@ -175,7 +175,7 @@ def ensure_target_table(conn, schema_name: str, table_name: str) -> None:
                   ticker text NOT NULL,
                   trade_date date NOT NULL,
                   window_start bigint,
-                  volume bigint,
+                  volume double precision,
                   open double precision,
                   close double precision,
                   high double precision,
@@ -187,6 +187,24 @@ def ensure_target_table(conn, schema_name: str, table_name: str) -> None:
                 """
             ).format(sql.Identifier(schema_name), sql.Identifier(table_name))
         )
+        cursor.execute(
+            """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = %s
+              AND table_name = %s
+              AND column_name = 'volume'
+            """,
+            (schema_name, table_name),
+        )
+        volume_type = cursor.fetchone()
+        if volume_type and volume_type[0] != "double precision":
+            cursor.execute(
+                sql.SQL("ALTER TABLE {}.{} ALTER COLUMN volume TYPE double precision USING volume::double precision").format(
+                    sql.Identifier(schema_name),
+                    sql.Identifier(table_name),
+                )
+            )
     conn.commit()
 
 
@@ -256,7 +274,7 @@ def upsert_stage(cursor, schema_name: str, table_name: str) -> int:
                 upper(nullif(ticker, '')) AS ticker,
                 to_timestamp((nullif(window_start, '')::numeric / 1000000000))::date AS trade_date,
                 nullif(window_start, '')::bigint AS window_start,
-                nullif(volume, '')::bigint AS volume,
+                nullif(volume, '')::double precision AS volume,
                 nullif(open, '')::double precision AS open,
                 nullif(close, '')::double precision AS close,
                 nullif(high, '')::double precision AS high,
