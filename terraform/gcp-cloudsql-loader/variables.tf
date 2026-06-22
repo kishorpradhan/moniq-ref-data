@@ -36,7 +36,7 @@ variable "scheduler_job_name" {
 variable "scheduler_cron" {
   description = "Cloud Scheduler cron expression."
   type        = string
-  default     = "0 8 * * *"
+  default     = "0 20 * * *"
 }
 
 variable "scheduler_time_zone" {
