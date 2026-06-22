@@ -263,14 +263,35 @@ python3 -m jobs.load_s3_to_cloudsql \
 GCP Secret Manager stores the runtime secrets used by the Cloud Run Job:
 
 ```text
-AWS_ACCESS_KEY_ID_SECRET=aws-access-key-id
-AWS_SECRET_ACCESS_KEY_SECRET=aws-secret-access-key
-DB_PASSWORD_SECRET=moniq-upload-db-password
+aws-access-key-id
+aws-secret-access-key
+moniq-upload-db-password
 ```
 
 `aws-access-key-id` and `aws-secret-access-key` contain the AWS IAM key for reading `s3://moniq-lake/raw/massive/day_aggs_v1/*`. `moniq-upload-db-password` is the existing Cloud SQL write-user password.
 
 Terraform for creating the GCP Secret Manager secret containers and IAM bindings lives in [terraform/gcp-secret-manager](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-secret-manager/README.md). It does not store secret values in Terraform state.
+
+### Runtime Configuration
+
+Non-secret runtime configuration is managed in [terraform/gcp-cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-cloudsql-loader/README.md), not in GitHub repository variables.
+
+Terraform owns values such as:
+
+```text
+S3_BUCKET=moniq-lake
+S3_PREFIX=raw/massive/day_aggs_v1
+DB_NAME=moniq_stocks
+DB_USER=moniq_upload
+DB_SCHEMA=public
+TARGET_TABLE=daily_pricing
+DAYS_AGO=1
+LOOKBACK_DAYS=5
+JOB_TIMEZONE=America/New_York
+BATCH_SIZE=50000
+```
+
+Terraform also owns the Cloud Run Job, Cloud Scheduler trigger, Cloud SQL connection attachment, and Secret Manager references.
 
 ### GitHub Actions Deployment
 
@@ -279,8 +300,8 @@ Terraform for creating the GCP Secret Manager secret containers and IAM bindings
 1. Authenticates to GCP with Workload Identity Federation.
 2. Builds [Dockerfile.cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/Dockerfile.cloudsql-loader).
 3. Pushes the image to Artifact Registry.
-4. Deploys or updates a Cloud Run Job.
-5. Creates or updates a Cloud Scheduler trigger.
+4. Runs Terraform in [terraform/gcp-cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-cloudsql-loader/README.md), passing the freshly built image URI.
+5. Terraform updates the Cloud Run Job and Cloud Scheduler trigger.
 
 Required GitHub repository variables:
 
@@ -290,38 +311,9 @@ GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_DEPLOY_SERVICE_ACCOUNT
 GCP_REGION
 ARTIFACT_REGISTRY_REPOSITORY
-CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT
-CLOUD_SQL_CONNECTION_NAME
-SCHEDULER_SERVICE_ACCOUNT
-S3_BUCKET
-S3_PREFIX
-DB_NAME
-DB_USER
-AWS_ACCESS_KEY_ID_SECRET
-AWS_SECRET_ACCESS_KEY_SECRET
-DB_PASSWORD_SECRET
 ```
 
-Optional variables:
-
-```text
-CLOUD_RUN_JOB_NAME
-SCHEDULER_JOB_NAME
-SCHEDULER_CRON
-SCHEDULER_TIME_ZONE
-DAYS_AGO
-LOOKBACK_DAYS
-JOB_TIMEZONE
-DB_SCHEMA
-TARGET_TABLE
-REQUIRE_DATA
-CLOUD_RUN_MEMORY
-CLOUD_RUN_CPU
-CLOUD_RUN_MAX_RETRIES
-CLOUD_RUN_TASK_TIMEOUT
-```
-
-The runtime service account needs `roles/cloudsql.client` and Secret Manager access to the three secrets. The deploy service account needs permission to push Artifact Registry images, deploy Cloud Run Jobs, and create/update Cloud Scheduler jobs.
+The runtime values that were previously GitHub variables are now Terraform variables/defaults. The deploy service account needs permission to push Artifact Registry images and run Terraform against Cloud Run and Cloud Scheduler.
 
 Manual Cloud Build image build:
 
@@ -336,6 +328,8 @@ gcloud builds submit . \
 AWS infrastructure lives under [terraform](/Users/kishorpradhan/moniq-reference-data/terraform/README.md). It creates the Glue database, optional S3 bucket, IAM roles, EMR Serverless app, Lambda staging function, Step Functions workflows, and EventBridge schedule.
 
 GCP Secret Manager infrastructure lives under [terraform/gcp-secret-manager](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-secret-manager/README.md). It creates only secret containers and IAM bindings, not secret values.
+
+GCP Cloud SQL loader infrastructure lives under [terraform/gcp-cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-cloudsql-loader/README.md). It manages the Cloud Run Job, Scheduler trigger, non-secret runtime configuration, and Secret Manager references using remote state in GCS.
 
 Typical AWS Terraform workflow:
 
@@ -353,6 +347,15 @@ cd terraform/gcp-secret-manager
 terraform init
 terraform plan
 terraform apply
+```
+
+Typical GCP Cloud SQL loader Terraform workflow:
+
+```bash
+cd terraform/gcp-cloudsql-loader
+terraform init
+terraform plan -var image_uri=us-central1-docker.pkg.dev/moniq-490803/moniq/s3-to-cloudsql:TAG
+terraform apply -var image_uri=us-central1-docker.pkg.dev/moniq-490803/moniq/s3-to-cloudsql:TAG
 ```
 
 ## Operational Notes

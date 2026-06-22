@@ -1,0 +1,8 @@
+image_uri = "us-central1-docker.pkg.dev/moniq-490803/moniq/s3-to-cloudsql:replace-me"
+
+# Defaults already target the production dev project:
+# - moniq-490803
+# - moniq_stocks.public.daily_pricing
+# - s3://moniq-lake/raw/massive/day_aggs_v1/
+#
+# Override values here only when deploying a different environment.

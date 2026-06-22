@@ -18,7 +18,10 @@ terraform/.terraform/
 **/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfvars
+**/terraform.tfvars
 terraform/*.tfstate
 terraform/*.tfstate.backup
+**/*.tfstate
+**/*.tfstate.backup
 terraform/common.zip
 terraform/stage_massive_day_aggs_lambda.zip
