@@ -15,6 +15,24 @@ locals {
   }
 
   scheduler_uri = "https://${var.gcp_region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project_id}/jobs/${var.cloud_run_job_name}:run"
+
+  schema_job_trigger = sha256(jsonencode({
+    image_uri                 = var.image_uri
+    cloud_sql_connection_name = var.cloud_sql_connection_name
+    db_name                   = var.runtime_env.db_name
+    db_user                   = var.runtime_env.db_user
+    db_schema                 = var.runtime_env.db_schema
+    target_table              = var.runtime_env.target_table
+    db_password_secret        = var.secret_ids.db_password
+  }))
+}
+
+resource "google_sql_database" "loader" {
+  project  = var.gcp_project_id
+  instance = var.cloud_sql_instance_name
+  name     = var.runtime_env.db_name
+
+  deletion_policy = "ABANDON"
 }
 
 resource "google_cloud_run_v2_job" "loader" {
@@ -98,6 +116,102 @@ resource "google_cloud_run_v2_job" "loader" {
   }
 }
 
+resource "google_cloud_run_v2_job" "schema" {
+  name                = var.schema_job_name
+  project             = var.gcp_project_id
+  location            = var.gcp_region
+  deletion_protection = false
+  labels              = var.labels
+
+  template {
+    task_count = 1
+
+    template {
+      service_account = var.runtime_service_account_email
+      max_retries     = 0
+      timeout         = var.schema_job_task_timeout
+
+      containers {
+        image = var.image_uri
+        args  = ["--ensure-schema-only"]
+
+        resources {
+          limits = {
+            cpu    = var.cloud_run_resources.cpu
+            memory = var.cloud_run_resources.memory
+          }
+        }
+
+        env {
+          name  = "CLOUD_SQL_CONNECTION_NAME"
+          value = var.cloud_sql_connection_name
+        }
+
+        env {
+          name  = "DB_NAME"
+          value = var.runtime_env.db_name
+        }
+
+        env {
+          name  = "DB_USER"
+          value = var.runtime_env.db_user
+        }
+
+        env {
+          name  = "DB_SCHEMA"
+          value = var.runtime_env.db_schema
+        }
+
+        env {
+          name  = "TARGET_TABLE"
+          value = var.runtime_env.target_table
+        }
+
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = var.secret_ids.db_password
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+
+      volumes {
+        name = "cloudsql"
+
+        cloud_sql_instance {
+          instances = [var.cloud_sql_connection_name]
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_sql_database.loader,
+  ]
+}
+
+resource "null_resource" "schema_apply" {
+  triggers = {
+    schema_job_trigger = local.schema_job_trigger
+  }
+
+  provisioner "local-exec" {
+    command = "gcloud run jobs execute ${var.schema_job_name} --project ${var.gcp_project_id} --region ${var.gcp_region} --wait"
+  }
+
+  depends_on = [
+    google_cloud_run_v2_job.schema,
+  ]
+}
+
 resource "google_cloud_scheduler_job" "loader" {
   name        = var.scheduler_job_name
   project     = var.gcp_project_id
@@ -126,5 +240,6 @@ resource "google_cloud_scheduler_job" "loader" {
 
   depends_on = [
     google_cloud_run_v2_job.loader,
+    null_resource.schema_apply,
   ]
 }

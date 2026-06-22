@@ -276,7 +276,7 @@ Terraform for creating the GCP Secret Manager secret containers and IAM bindings
 
 Non-secret runtime configuration is managed in [terraform/gcp-cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-cloudsql-loader/README.md), not in GitHub repository variables.
 
-Terraform owns values such as:
+Terraform owns the Cloud SQL database, the target table initialization, and values such as:
 
 ```text
 S3_BUCKET=moniq-lake
@@ -291,7 +291,7 @@ JOB_TIMEZONE=America/New_York
 BATCH_SIZE=50000
 ```
 
-Terraform also owns the Cloud Run Job, Cloud Scheduler trigger, Cloud SQL connection attachment, and Secret Manager references.
+Terraform also owns the Cloud Run Job, a schema-init Cloud Run Job, Cloud Scheduler trigger, Cloud SQL connection attachment, and Secret Manager references. The schema-init job creates `moniq_stocks.public.daily_pricing` using the same container image and DB password secret, so the table is initialized during Terraform apply without storing the DB password in Terraform state.
 
 ### GitHub Actions Deployment
 
@@ -330,6 +330,8 @@ AWS infrastructure lives under [terraform](/Users/kishorpradhan/moniq-reference-
 GCP Secret Manager infrastructure lives under [terraform/gcp-secret-manager](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-secret-manager/README.md). It creates only secret containers and IAM bindings, not secret values.
 
 GCP Cloud SQL loader infrastructure lives under [terraform/gcp-cloudsql-loader](/Users/kishorpradhan/moniq-reference-data/terraform/gcp-cloudsql-loader/README.md). It manages the Cloud Run Job, Scheduler trigger, non-secret runtime configuration, and Secret Manager references using remote state in GCS.
+
+It also manages the Cloud SQL database resource and a schema-init Cloud Run Job that creates `public.daily_pricing`.
 
 Typical AWS Terraform workflow:
 

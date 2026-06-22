@@ -89,6 +89,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-sslmode", default=os.getenv("DB_SSLMODE"), help="Optional Postgres sslmode.")
     parser.add_argument("--db-schema", default=os.getenv("DB_SCHEMA", "public"), help="Target Postgres schema.")
     parser.add_argument("--target-table", default=os.getenv("TARGET_TABLE", "daily_pricing"), help="Target table name.")
+    parser.add_argument(
+        "--ensure-schema-only",
+        action="store_true",
+        default=env_bool("ENSURE_SCHEMA_ONLY", False),
+        help="Create the target schema/table and exit without loading S3 data.",
+    )
     return parser.parse_args()
 
 
@@ -357,6 +363,9 @@ def main() -> None:
     s3_client = build_s3_client(args)
     with closing(connect(args)) as conn:
         ensure_target_table(conn, args.db_schema, args.target_table)
+        if args.ensure_schema_only:
+            logging.info("Ensured target table %s.%s and exiting", args.db_schema, args.target_table)
+            return
         files_loaded, staged_rows, upserted_rows = load_available_keys(conn, s3_client, args, keys)
 
     if files_loaded == 0 and args.require_data:

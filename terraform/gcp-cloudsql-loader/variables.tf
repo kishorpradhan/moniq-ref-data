@@ -21,6 +21,12 @@ variable "cloud_run_job_name" {
   default     = "s3-to-cloudsql-daily-pricing"
 }
 
+variable "schema_job_name" {
+  description = "Cloud Run Job name for one-off schema/table initialization."
+  type        = string
+  default     = "s3-to-cloudsql-schema-init"
+}
+
 variable "scheduler_job_name" {
   description = "Cloud Scheduler job name that triggers the Cloud Run Job."
   type        = string
@@ -55,6 +61,12 @@ variable "cloud_sql_connection_name" {
   description = "Cloud SQL connection name mounted into Cloud Run."
   type        = string
   default     = "moniq-490803:us-central1:moniq-postgres"
+}
+
+variable "cloud_sql_instance_name" {
+  description = "Cloud SQL instance name that owns the target database."
+  type        = string
+  default     = "moniq-postgres"
 }
 
 variable "runtime_env" {
@@ -123,6 +135,12 @@ variable "cloud_run_task_timeout" {
   description = "Cloud Run Job task timeout."
   type        = string
   default     = "3600s"
+}
+
+variable "schema_job_task_timeout" {
+  description = "Cloud Run Job task timeout for schema/table initialization."
+  type        = string
+  default     = "600s"
 }
 
 variable "labels" {
